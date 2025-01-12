@@ -336,6 +336,7 @@ def motionVqvae_train(model, loss_func, train_loader, epoch, num_epoch, device=t
 
         print(f'epoch: {epoch}/{num_epoch}, batch: {i}/{len_data}, '
               f'loss: {loss.item():.6f}, recon_loss: {loss_dict.get("recon_loss", 0):.6f}, '
-              f'vq_loss: {loss_dict.get("vq_loss", 0):.6f}, bone_length_loss: {loss_dict.get("bone_length_loss", 0):.6f}')
+              f'vq_loss: {loss_dict.get("vq_loss", 0):.6f}, bone_length_loss: {loss_dict.get("bone_length_loss", 0):.6f}, '
+              f'velocity_loss: {loss_dict.get("velocity_loss", 0):.6f}')
 
     return train_loss / len_data

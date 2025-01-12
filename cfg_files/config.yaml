@@ -37,7 +37,7 @@ pretrain_dir: data/checkpoint.pkl
 # The name of your training loss function
 # Split different names with a single space
 # e.g., KL_Loss MPJPE L1 L2
-train_loss: VQVAE_Loss # SMPL_Loss Keyp_Loss Mesh_Loss Joint_Loss Pen_Loss Vel_Loss
+train_loss: VQVAE_Loss Bone_Length_Loss Velocity_Loss # SMPL_Loss Keyp_Loss Mesh_Loss Joint_Loss Pen_Loss Vel_Loss
 test_loss: MPJPE_instance #MPJPE #MPJPE PCK PA_MPJPE MPJPE_H36M MPJPE_instance Interaction
 
 #visualize

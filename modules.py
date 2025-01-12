@@ -113,6 +113,9 @@ class LossLoader():
                 (20, 22), (21, 23)
                 ]
                 self.train_loss.update(Bone_Length_Loss=Bone_Length_Loss(self.device, bone_pairs))
+            if loss == 'Velocity_Loss':
+                self.train_loss.update(Velocity_Loss = Velocity_Loss(self.device))
+            
 
 
             # You can define your loss function in loss_func.py, e.g., Smooth6D, 
@@ -199,6 +202,9 @@ class LossLoader():
             elif ltype == 'Bone_Length_Loss':
                 bone_loss = self.train_loss['Bone_Length_Loss'](pred['x_recon'], gt['pose'])
                 loss_dict = {**loss_dict, **bone_loss}
+            elif ltype == 'Velocity_Loss':
+                velocity_loss = self.train_loss['Velocity_Loss'](pred['x_recon'], gt['pose'])
+                loss_dict = {**loss_dict, **velocity_loss}
 
             # Calculate your loss here
 

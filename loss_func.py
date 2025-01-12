@@ -1036,8 +1036,8 @@ class Bone_Length_Loss(nn.Module):
         bone_length_loss = 0.0
 
         # 遍历骨骼对并计算每对骨骼的长度差异
-        for p in range(P):  # 遍历第 p 个人
-            for pair in self.bone_pairs:  # 遍历骨骼对
+        for p in range(P):  
+            for pair in self.bone_pairs:  
                 joint_1_start = pair[0] * 3
                 joint_1_end = joint_1_start + 3
                 joint_2_start = pair[1] * 3
@@ -1060,4 +1060,43 @@ class Bone_Length_Loss(nn.Module):
         bone_length_loss = bone_length_loss / (P * len(self.bone_pairs))
 
         loss_dict['bone_length_loss'] = bone_length_loss
+        return loss_dict
+    
+
+class Velocity_Loss(nn.Module):
+    def __init__(self, device):
+        """
+        速度损失类，用于计算相邻帧之间的关节速度差异
+        """
+        super(Velocity_Loss, self).__init__()
+        self.device = device
+        self.criterion = nn.MSELoss()  # 使用均方误差作为损失函数
+
+    def forward(self, x_recon, x):
+        """
+        前向传播计算速度损失
+        """
+        loss_dict = {}
+
+        B, T, P, D = x.shape
+        x_recon = x_recon.view(B, T, P, D) 
+
+        J = D // 3  # 关节数量
+
+        x_recon = x_recon.view(B, T, P, J, 3)  # [B, T, P, J, 3]
+        x = x.view(B, T, P, J, 3)  # [B, T, P, J, 3]
+
+        # 计算相邻帧之间的关节速度差异
+        pred_velocity = x_recon[:, 1:, :, :, :] - x_recon[:, :-1, :, :, :]  
+        target_velocity = x[:, 1:, :, :, :] - x[:, :-1, :, :, :] 
+
+        # print("Pred Velocity:", pred_velocity)
+        # print("Target Velocity:", target_velocity)
+        # print("Velocity Difference:", pred_velocity - target_velocity)
+
+        # 计算速度差的 L2 损失
+        velocity_loss = torch.mean((pred_velocity - target_velocity) ** 2)
+
+        loss_dict['velocity_loss'] = velocity_loss
+
         return loss_dict
