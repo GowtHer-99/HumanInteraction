@@ -301,3 +301,41 @@ def reconstruction_eval(model, loader, loss_func, device=torch.device('cpu')):
                     model.save_results(results, i, batchsize)
 
         return output, gt
+
+
+def motionVqvae_train(model, loss_func, train_loader, epoch, num_epoch, device=torch.device('cpu')):
+    """
+    Training function for Motion VQ-VAE model
+    """
+    print('-' * 10 + 'motion vqvae model training' + '-' * 10)
+    len_data = len(train_loader)
+    train_loss = 0.
+    for i, data in enumerate(train_loader):
+        # batchsize = data['pose'].shape[0]
+        data = to_device(data, device) # Move pose data to the specified device
+        pose = data['pose']
+        # Flatten time dimension into batch dimension
+        B, T, J, D = pose.shape
+        pose = pose.view(B * T, J, D)
+
+        # Zero the gradients
+        model.optimizer.zero_grad()
+
+        # Forward pass
+        pred = model.model(pose)  # 返回一个字典
+
+        # Calculate loss
+        loss, loss_dict = loss_func.calcul_trainloss(pred, data)
+
+        # Backward pass and optimize
+        loss.backward()
+        model.optimizer.step()
+
+        # Record the loss
+        train_loss += loss.detach().item()
+
+        print(f'epoch: {epoch}/{num_epoch}, batch: {i}/{len_data}, '
+              f'loss: {loss.item():.6f}, recon_loss: {loss_dict.get("recon_loss", 0):.6f}, '
+              f'vq_loss: {loss_dict.get("vq_loss", 0):.6f}')
+
+    return train_loss / len_data

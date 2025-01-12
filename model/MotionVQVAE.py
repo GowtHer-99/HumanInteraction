@@ -171,10 +171,12 @@ def forward(self, inputs):
 
         quantized = torch.matmul(encodings, self._embedding.weight).view(input_shape)
         
-        # 计算损失
-        e_latent_loss = F.mse_loss(quantized.detach(), inputs)  # encoder loss
-        q_latent_loss = F.mse_loss(quantized, inputs.detach())  # quantizer loss
-        loss = q_latent_loss + self._commitment_cost * e_latent_loss
+        quantized_original = quantized
+
+        # # 计算损失
+        # e_latent_loss = F.mse_loss(quantized.detach(), inputs)  # encoder loss
+        # q_latent_loss = F.mse_loss(quantized, inputs.detach())  # quantizer loss
+        # loss = q_latent_loss + self._commitment_cost * e_latent_loss
         
         quantized = inputs + (quantized - inputs).detach()
         
@@ -196,7 +198,7 @@ def forward(self, inputs):
             # self._embedding.weight.data = self.ema_w / cluster_size.unsqueeze(1)
             self._embedding.weight.data.mul_(self.decay).add_((1 - self.decay) * dw / cluster_size.unsqueeze(1))
 
-        return loss, quantized, perplexity, encodings
+        return quantized, quantized_original, perplexity, encodings
 
 
 class VectorQuantizer(nn.Module):
@@ -227,10 +229,12 @@ class VectorQuantizer(nn.Module):
         
         quantized = torch.matmul(encodings, self._embedding.weight).view(input_shape)
         
+        quantized_original = quantized
+
         # 计算损失
-        e_latent_loss = F.mse_loss(quantized.detach(), inputs)  # encoder loss
-        q_latent_loss = F.mse_loss(quantized, inputs.detach())  # quantizer loss
-        loss = q_latent_loss + self._commitment_cost * e_latent_loss
+        # e_latent_loss = F.mse_loss(quantized.detach(), inputs)  # encoder loss
+        # q_latent_loss = F.mse_loss(quantized, inputs.detach())  # quantizer loss
+        # loss = q_latent_loss + self._commitment_cost * e_latent_loss
         
         quantized = inputs + (quantized - inputs).detach()
         
@@ -238,7 +242,8 @@ class VectorQuantizer(nn.Module):
         avg_probs = torch.mean(encodings, dim=0)
         perplexity = torch.exp(-torch.sum(avg_probs * torch.log(avg_probs + 1e-10)))
         
-        return loss, quantized, perplexity, encodings
+        # return loss, quantized, perplexity, encodings
+        return quantized, quantized_original, perplexity, encodings
 
 class Encoder(nn.Module):
     def __init__(self, in_channels, num_hiddens, num_residual_layers, num_residual_hiddens):
@@ -351,9 +356,14 @@ class Decoder(nn.Module):
 
 
 class MotionVQVAE(nn.Module):
-    def __init__(self, num_hiddens, num_residual_layers, num_residual_hiddens, 
-                 num_embeddings, embedding_dim, commitment_cost, decay=0):
+    # def __init__(self, num_hiddens, num_residual_layers, num_residual_hiddens, 
+    #              num_embeddings, embedding_dim, commitment_cost, decay=0,smpl=None, frame_length=None):
+    def __init__(self, smpl=None, frame_length=None, num_hiddens=256, num_residual_layers=3, num_residual_hiddens=64,
+        num_embeddings=1024, embedding_dim=128, commitment_cost=0.25, decay=0):
         super(MotionVQVAE, self).__init__()
+
+        self.smpl = smpl  # 可选：未来用于生成3D形状或姿态
+        self.frame_length = frame_length  # 可选：未来用于多帧时序处理
 
         # 编码器，将输入3D运动数据编码为低维表示
         self.encoder = Encoder(1, num_hiddens,
@@ -380,21 +390,39 @@ class MotionVQVAE(nn.Module):
                                 num_residual_layers, 
                                 num_residual_hiddens)
 
-    def forward(self, x):
-        # print(f"Input to Encoder (before): {x.shape}")
-        # 编码器提取低维表示 (B, J, D) -> (B, num_hiddens, j, n)
-        z = self.encoder(x)
+    # def forward(self, x):
+    #     # print(f"Input to Encoder (before): {x.shape}")
+    #     # 编码器提取低维表示 (B, J, D) -> (B, num_hiddens, j, n)
+    #     z = self.encoder(x)
         
-        # 降维卷积匹配量化输入维度 (B, num_hiddens, j, n) -> (B, embedding_dim, j, n)
-        z = self.pre_vq_conv(z)
+    #     # 降维卷积匹配量化输入维度 (B, num_hiddens, j, n) -> (B, embedding_dim, j, n)
+    #     z = self.pre_vq_conv(z)
 
-        # 量化层计算损失和量化输出
-        loss, quantized, perplexity, _ = self.vq_vae(z)
+    #     # 量化层计算损失和量化输出
+    #     loss, quantized, perplexity, _ = self.vq_vae(z)
 
-        # 解码器将量化结果还原到3D运动空间
-        x_recon = self.decoder(quantized)
+    #     # 解码器将量化结果还原到3D运动空间
+    #     x_recon = self.decoder(quantized)
 
-        # 返回量化损失、重建运动数据和困惑度
-        return loss, x_recon, perplexity
+    #     # 返回量化损失、重建运动数据和困惑度
+    #     return loss, x_recon, perplexity
     
-  
+#   def forward(self, x):
+#     # 编码数据
+#     z = self.encoder(x)
+#     z = self.pre_vq_conv(z)
+
+#     # 量化编码数据
+#     quantized, _, _ = self.vq_vae(z)
+
+#     # 解码数据
+#     x_recon = self.decoder(quantized)
+
+#     # 返回重建数据和量化编码
+#     return x_recon, quantized
+    def forward(self, x):
+        z_e = self.encoder(x)
+        z_e_pre_vq = self.pre_vq_conv(z_e)
+        quantized, quantized_original, _, _= self.vq_vae(z_e_pre_vq)
+        x_recon = self.decoder(quantized)
+        return {'x_recon': x_recon, 'quantized': quantized_original, 'z_e': z_e_pre_vq}

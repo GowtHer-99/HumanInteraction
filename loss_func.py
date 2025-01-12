@@ -16,6 +16,7 @@ from utils.mesh_intersection.bvh_search_tree import BVH
 import utils.mesh_intersection.loss as collisions_loss
 from utils.mesh_intersection.filter_faces import FilterFaces
 from utils.FileLoaders import load_pkl
+import torch.nn.functional as F
 
 class L1(nn.Module):
     def __init__(self, device):
@@ -986,3 +987,28 @@ class PCK(nn.Module):
 
         return joints - pelvis[:,None,:].repeat(1, 14, 1)
 
+class VQVAE_Loss(nn.Module):
+    def __init__(self, device, commitment_cost=0.25):
+        super(VQVAE_Loss, self).__init__()
+        self.device = device
+        self.commitment_cost = commitment_cost
+        self.reconstruction_loss_fn = nn.MSELoss()
+
+    def forward(self, x_recon, x, quantized, z_e):
+        loss_dict = {}
+        B, T, J, D = x.shape
+        x = x.view(B * T, J, D)
+        # Reconstruction Loss
+        recon_loss = self.reconstruction_loss_fn(x_recon, x)
+
+        # Commitment Loss
+        commitment_loss = F.mse_loss(quantized, z_e.detach())
+        e_latent_loss = F.mse_loss(z_e, quantized.detach())
+        vq_loss = commitment_loss + self.commitment_cost * e_latent_loss
+
+        loss_dict['recon_loss'] = recon_loss
+        loss_dict['vq_loss'] = vq_loss
+
+        # total_loss = recon_loss + vq_loss
+        # loss_dict['total_loss'] = total_loss
+        return loss_dict

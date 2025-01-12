@@ -2,7 +2,7 @@
 note: train
 
 #project basic
-task: reconstruction  # interVAE reconstruction
+task: motionVqvae  # interVAE reconstruction
 
 #model basic
 gpu_index: 0
@@ -23,7 +23,7 @@ trainset: Hi4D
 testset: Hi4D
 
 # cliff hmr cliff_hmr pose_transformer_v8  relation relation_v8
-model: interhuman_diffusion_phys
+model: MotionVQVAE #interhuman_diffusion_phys
 use_prior: False
 
 mode: train # train/test/eval
@@ -37,7 +37,7 @@ pretrain_dir: data/checkpoint.pkl
 # The name of your training loss function
 # Split different names with a single space
 # e.g., KL_Loss MPJPE L1 L2
-train_loss: SMPL_Loss Keyp_Loss Mesh_Loss Joint_Loss Vel_Loss # SMPL_Loss Keyp_Loss Mesh_Loss Joint_Loss Pen_Loss Vel_Loss
+train_loss: VQVAE_Loss # SMPL_Loss Keyp_Loss Mesh_Loss Joint_Loss Pen_Loss Vel_Loss
 test_loss: MPJPE_instance #MPJPE #MPJPE PCK PA_MPJPE MPJPE_H36M MPJPE_instance Interaction
 
 #visualize

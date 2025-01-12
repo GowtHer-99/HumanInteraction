@@ -18,7 +18,6 @@ from modules import init, LossLoader, ModelLoader, DatasetLoader
 # import sys
 # sys.argv = ['','--config=cfg_files/config.yaml'] # interVAE config
 
-
 def main(**args):
     seed = 7
     g = set_seed(seed)
@@ -37,7 +36,7 @@ def main(**args):
     # Load loss function
     loss = LossLoader(smpl, device=device, **args)
 
-    # Load model
+    # # # Load model
     model = ModelLoader(dtype=dtype, device=device, out_dir=out_dir, **args)
 
     # create data loader
@@ -53,6 +52,7 @@ def main(**args):
         )
         if args.get('use_sch'):
             model.load_scheduler(train_dataset.cumulative_sizes[-1])
+    
     test_dataset = dataset.load_testset()
     test_loader = DataLoader(
         test_dataset,
@@ -65,7 +65,7 @@ def main(**args):
     # Load handle function with the task name
     task = args.get('task')
     exec('from process import %s_train' %task)
-    exec('from process import %s_test' %task)
+    # exec('from process import %s_test' %task)
 
     for epoch in range(num_epoch):
         # training mode
@@ -97,7 +97,6 @@ def main(**args):
             logger.append([int(epoch + 1), lr, training_loss, testing_loss])
 
     logger.close()
-
 
 if __name__ == "__main__":
     args = parse_config()

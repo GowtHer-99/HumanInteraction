@@ -244,7 +244,7 @@ class Reconstruction_Feature_Data(base):
         init_pose_6d = matrix_to_rotation_6d(init_pose_6d)
         init_pose_6d = init_pose_6d.reshape(self.frame_length, self.max_people, -1)
 
-
+        # origin_img = cv2.imread(imgnames[0])
         load_data['valid'] = valid
         load_data['has_3d'] = has_3d
         load_data['has_smpl'] = has_smpls

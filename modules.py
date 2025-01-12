@@ -102,6 +102,9 @@ class LossLoader():
                 self.train_loss.update(KL_Loss=KL_Loss(self.device))
             if loss == 'MPJPE_instance':
                 self.train_loss.update(MPJPE_instance=MPJPE(self.device))
+            if 'VQVAE_Loss' in self.train_loss_type:
+                self.train_loss.update(VQVAE_Loss=VQVAE_Loss(self.device))
+
             # You can define your loss function in loss_func.py, e.g., Smooth6D, 
             # and load the loss by adding the following lines
 
@@ -175,6 +178,15 @@ class LossLoader():
                 KL_Loss_a = self.train_loss['KL_Loss'](pred['q_a'])
                 KL_Loss_b = self.train_loss['KL_Loss'](pred['q_b'])
                 loss_dict = {**loss_dict, **KL_Loss_a, **KL_Loss_b}
+            elif ltype == 'VQVAE_Loss':
+                vqvae_loss = self.train_loss['VQVAE_Loss'](
+                pred['x_recon'],  # 预测的重建数据
+                gt['pose'],          # Ground Truth
+                pred['quantized'], # 量化后的数据
+                pred['z_e']        # 编码器输出的潜在向量
+            )
+                loss_dict = {**loss_dict, **vqvae_loss }
+
             # Calculate your loss here
 
             # elif ltype == 'Smooth6D':
@@ -810,6 +822,8 @@ class DatasetLoader():
         for i in range(len(self.trainset)):
             if self.task == 'reconstruction':
                 train_dataset.append(Reconstruction_Feature_Data(True, self.dtype, self.data_folder, self.trainset[i], self.smpl, frame_length=self.frame_length))
+            elif self.task == 'motionVqvae':
+                train_dataset.append(Reconstruction_Feature_Data(True, self.dtype, self.data_folder, self.trainset[i], self.smpl, frame_length=self.frame_length))
         train_dataset = torch.utils.data.ConcatDataset(train_dataset)
         return train_dataset
 
@@ -818,6 +832,8 @@ class DatasetLoader():
         for i in range(len(self.testset)):
             if self.task == 'reconstruction':
                 test_dataset.append(Reconstruction_Feature_Data(False, self.dtype, self.data_folder, self.testset[i], self.smpl, frame_length=self.frame_length))
+            elif self.task == 'motionVqvae':
+                test_dataset.append(Reconstruction_Feature_Data(False, self.dtype, self.data_folder, self.testset[i], self.smpl, frame_length=self.frame_length))        
         test_dataset = torch.utils.data.ConcatDataset(test_dataset)
         return test_dataset
 
@@ -825,6 +841,8 @@ class DatasetLoader():
         test_dataset = []
         for i in range(len(self.testset)):
             if self.task == 'reconstruction':
+                test_dataset.append(Reconstruction_Eval_Data(False, self.dtype, self.data_folder, self.testset[i], self.smpl, frame_length=self.frame_length))
+            if self.task == 'motionVqvae':
                 test_dataset.append(Reconstruction_Eval_Data(False, self.dtype, self.data_folder, self.testset[i], self.smpl, frame_length=self.frame_length))
         return test_dataset
 
