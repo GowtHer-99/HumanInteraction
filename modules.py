@@ -102,8 +102,18 @@ class LossLoader():
                 self.train_loss.update(KL_Loss=KL_Loss(self.device))
             if loss == 'MPJPE_instance':
                 self.train_loss.update(MPJPE_instance=MPJPE(self.device))
-            if 'VQVAE_Loss' in self.train_loss_type:
+            if loss == 'VQVAE_Loss':
                 self.train_loss.update(VQVAE_Loss=VQVAE_Loss(self.device))
+            if loss == 'Bone_Length_Loss':
+                bone_pairs = [
+                (0, 1), (0, 2), (0, 3), (1, 4), (2, 5), (3, 6), 
+                (4, 7), (5, 8), (6, 9), (7, 10), (8, 11), 
+                (9, 12), (9, 13), (9, 14), (12, 15), (13, 16),
+                (14, 17), (16, 18), (17, 19), (18, 20), (19, 21),
+                (20, 22), (21, 23)
+                ]
+                self.train_loss.update(Bone_Length_Loss=Bone_Length_Loss(self.device, bone_pairs))
+
 
             # You can define your loss function in loss_func.py, e.g., Smooth6D, 
             # and load the loss by adding the following lines
@@ -186,6 +196,9 @@ class LossLoader():
                 pred['z_e']        # 编码器输出的潜在向量
             )
                 loss_dict = {**loss_dict, **vqvae_loss }
+            elif ltype == 'Bone_Length_Loss':
+                bone_loss = self.train_loss['Bone_Length_Loss'](pred['x_recon'], gt['pose'])
+                loss_dict = {**loss_dict, **bone_loss}
 
             # Calculate your loss here
 

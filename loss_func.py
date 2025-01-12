@@ -996,8 +996,8 @@ class VQVAE_Loss(nn.Module):
 
     def forward(self, x_recon, x, quantized, z_e):
         loss_dict = {}
-        B, T, J, D = x.shape
-        x = x.view(B * T, J, D)
+        B, T, P, D = x.shape
+        x = x.view(B * T, P, D)
         # Reconstruction Loss
         recon_loss = self.reconstruction_loss_fn(x_recon, x)
 
@@ -1011,4 +1011,53 @@ class VQVAE_Loss(nn.Module):
 
         # total_loss = recon_loss + vq_loss
         # loss_dict['total_loss'] = total_loss
+        return loss_dict
+    
+class Bone_Length_Loss(nn.Module):
+    def __init__(self, device, bone_pairs):
+        """
+        骨骼长度损失类
+        """
+        super(Bone_Length_Loss, self).__init__()
+        self.device = device
+        self.bone_pairs = bone_pairs  # 每对骨骼连接的关节索引
+        self.criterion = nn.MSELoss()
+
+    def forward(self, x_recon, x):
+        """
+        前向传播计算骨骼长度损失
+        """
+        loss_dict = {}
+
+        B, T, P, D = x.shape
+        x_recon = x_recon.view(B, T, P, D) 
+        
+        # 初始化损失值
+        bone_length_loss = 0.0
+
+        # 遍历骨骼对并计算每对骨骼的长度差异
+        for p in range(P):  # 遍历第 p 个人
+            for pair in self.bone_pairs:  # 遍历骨骼对
+                joint_1_start = pair[0] * 3
+                joint_1_end = joint_1_start + 3
+                joint_2_start = pair[1] * 3
+                joint_2_end = joint_2_start + 3
+
+                # 提取关节的 3D 坐标
+                pred_joint_1 = x_recon[:, :, p, joint_1_start:joint_1_end]
+                pred_joint_2 = x_recon[:, :, p, joint_2_start:joint_2_end]
+                gt_joint_1 = x[:, :, p, joint_1_start:joint_1_end]
+                gt_joint_2 = x[:, :, p, joint_2_start:joint_2_end]
+
+                # 计算骨骼长度
+                pred_bone = torch.norm(pred_joint_1 - pred_joint_2, dim=-1)
+                gt_bone = torch.norm(gt_joint_1 - gt_joint_2, dim=-1)
+
+                # 累加损失
+                bone_length_loss += self.criterion(pred_bone, gt_bone)
+
+        # 归一化损失
+        bone_length_loss = bone_length_loss / (P * len(self.bone_pairs))
+
+        loss_dict['bone_length_loss'] = bone_length_loss
         return loss_dict
