@@ -13,6 +13,9 @@ from torch.utils.data import DataLoader
 from cmd_parser import parse_config
 from utils.module_utils import seed_worker, set_seed
 from modules import init, LossLoader, ModelLoader, DatasetLoader
+from datasets.reconstruction_feature_data import Reconstruction_Feature_Data
+import cv2
+import numpy as np
 
 ###########Load config file in debug mode#########
 # import sys
@@ -52,7 +55,12 @@ def main(**args):
         )
         if args.get('use_sch'):
             model.load_scheduler(train_dataset.cumulative_sizes[-1])
-    
+        for i, data in enumerate(train_loader):
+            print(f"Data keys: {data.keys()}")
+            for key, value in data.items():
+                print(f"{key}: {value.shape if isinstance(value, torch.Tensor) else value}")
+            break  # 检查一个 batch 后退出
+
     test_dataset = dataset.load_testset()
     test_loader = DataLoader(
         test_dataset,
@@ -65,12 +73,15 @@ def main(**args):
     # Load handle function with the task name
     task = args.get('task')
     exec('from process import %s_train' %task)
-    # exec('from process import %s_test' %task)
+    exec('from process import %s_test' %task)
 
     for epoch in range(num_epoch):
         # training mode
         if mode == 'train':
-            training_loss = eval('%s_train' %task)(model, loss, train_loader, epoch, num_epoch, device=device)
+            # training_loss = eval('%s_train' %task)(model, loss, train_loader, epoch, num_epoch, smpl, device=device)
+            training_loss = eval('%s_train' % task)(
+            model, loss, train_loader, epoch, num_epoch, smpl=smpl, device=device
+            )
 
             # # save trained model
             # if (epoch) % 1 == 0:
@@ -97,6 +108,7 @@ def main(**args):
             logger.append([int(epoch + 1), lr, training_loss, testing_loss])
 
     logger.close()
+    print('finish!')
 
 if __name__ == "__main__":
     args = parse_config()
