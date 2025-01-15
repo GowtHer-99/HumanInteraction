@@ -187,6 +187,7 @@ class Reconstruction_Feature_Data(base):
             single_person = np.zeros((self.frame_length,), dtype=self.np_type)
 
         vertss, jointss, gt_transs = [], [], []
+        smpl_joints_list = []
         for i in range(self.max_people):
             gender = genders[i]
             if gender == 0:
@@ -200,7 +201,13 @@ class Reconstruction_Feature_Data(base):
                 temp_pose = torch.from_numpy(poses[:,i]).reshape(-1, 72).contiguous()
                 temp_shape = torch.from_numpy(shapes[:,i]).reshape(-1, 10).contiguous()
                 temp_trans = torch.zeros((self.frame_length, 3), dtype=torch.float32)
+                smpl_verts, smpl_joints = smpl_model(temp_shape, temp_pose, temp_trans, halpe=False)
                 verts, joints = smpl_model(temp_shape, temp_pose, temp_trans, halpe=True)
+                # print("Pose:",temp_pose[0])
+                # print("shape:",temp_shape[0])
+                # print("trans:",temp_trans[0])
+
+            smpl_joints_list.append(smpl_joints[:, None]) 
 
             temp_keyps = gt_keyps[:,i].reshape(-1, 26, 3)
             gt_trans = []
@@ -243,7 +250,8 @@ class Reconstruction_Feature_Data(base):
         init_pose_6d = axis_angle_to_matrix(init_pose_6d)
         init_pose_6d = matrix_to_rotation_6d(init_pose_6d)
         init_pose_6d = init_pose_6d.reshape(self.frame_length, self.max_people, -1)
-
+        smpl_joints = torch.cat(smpl_joints_list, dim=1)  # [frame_length, max_people, 24, 3]
+        
         # origin_img = cv2.imread(imgnames[0])
         load_data['valid'] = valid
         load_data['has_3d'] = has_3d
@@ -251,6 +259,7 @@ class Reconstruction_Feature_Data(base):
         load_data['features'] = features
         load_data['verts'] = vertss
         load_data['gt_joints'] = gt_joints
+        load_data['smpl_joint'] = smpl_joints
         # load_data['img'] = self.normalize_img(img)
         load_data['init_pose'] = init_poses
         load_data['init_pose_6d'] = init_pose_6d

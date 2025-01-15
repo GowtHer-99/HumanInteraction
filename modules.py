@@ -155,7 +155,6 @@ class LossLoader():
 
     def calcul_trainloss(self, pred, gt):
         loss_dict = {}
-        # print(gt['has_smpl'].shape)
         gt['has_smpl'] = gt['has_smpl'].squeeze(1)
         gt['has_3d'] = gt['has_3d'].squeeze(1)
 
@@ -194,17 +193,17 @@ class LossLoader():
                 loss_dict = {**loss_dict, **KL_Loss_a, **KL_Loss_b}
             elif ltype == 'VQVAE_Loss':
                 vqvae_loss = self.train_loss['VQVAE_Loss'](
-                pred['x_recon'],   # 预测的重建数据
-                gt['smpl_joint'],                # Ground Truth
+                pred['x_recon'],  # 预测的重建数据
+                gt['pose'],          # Ground Truth
                 pred['quantized'], # 量化后的数据
                 pred['z_e']        # 编码器输出的潜在向量
             )
                 loss_dict = {**loss_dict, **vqvae_loss }
             elif ltype == 'Bone_Length_Loss':
-                bone_loss = self.train_loss['Bone_Length_Loss'](pred['x_recon'], gt['smpl_joint'])
+                bone_loss = self.train_loss['Bone_Length_Loss'](pred['x_recon'], gt['pose'])
                 loss_dict = {**loss_dict, **bone_loss}
             elif ltype == 'Velocity_Loss':
-                velocity_loss = self.train_loss['Velocity_Loss'](pred['x_recon'], gt['smpl_joint'])
+                velocity_loss = self.train_loss['Velocity_Loss'](pred['x_recon'], gt['pose'])
                 loss_dict = {**loss_dict, **velocity_loss}
 
             # Calculate your loss here

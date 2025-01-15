@@ -9,6 +9,7 @@
 import torch
 import numpy as np
 from tqdm import tqdm
+from utils.smpl_torch_batch import SMPLModel
 
 def merge_gt(data):
     batch_size, frame_length, agent_num = data['pose'].shape[:3]
@@ -75,7 +76,7 @@ def to_device(data, device):
 
     return data
 
-def reconstruction_train(model, loss_func, train_loader, epoch, num_epoch, device=torch.device('cpu'), **kwargs):
+def reconstruction_train(model, loss_func, train_loader, epoch, num_epoch, device=torch.device('cpu')):
 
     print('-' * 10 + 'model training' + '-' * 10)
     len_data = len(train_loader)
@@ -308,35 +309,40 @@ def motionVqvae_train(model, loss_func, train_loader, epoch, num_epoch, device=t
     Training function for Motion VQ-VAE model
     """
     print('-' * 10 + 'motion vqvae model training' + '-' * 10)
-    smpl = kwargs.get('smpl', None)  # 提取 smpl 参数，默认 None
-    if smpl is None:
-        raise ValueError("SMPL model must be provided for motionVqvae_train.")
+    model_smpl = SMPLModel(
+                                device=torch.device('cuda'),
+                                model_path='./data/smpl/SMPL_NEUTRAL.pkl', 
+                                data_type=torch.float32,
+                            )
     len_data = len(train_loader)
-    smpl = smpl.to(device)
-
     train_loss = 0.
     for i, data in enumerate(train_loader):
         # batchsize = data['pose'].shape[0]
         data = to_device(data, device) # Move pose data to the specified device
         pose = data['pose']
         # Flatten time dimension into batch dimension
-        B, T, P, D= pose.shape
-        # pose = pose.view(B * T, P, D)
-        # pose = pose.view(B * T * P, D)
-        # pose = data['pose'].view(-1, 72).to(device)   # Flatten pose to [B * T * P, 72]
-        # betas = data['betas'].view(-1, 10).to(device)   # Flatten betas to [B * T * P, 10]
-        # trans = data['gt_cam_t'].view(-1, 3).to(device) 
+        # B, T, J, D = pose.shape
+        # pose = pose.view(B * T, J, D)
 
-
-        # joints_3d = smpl.forward(pose)  # 输出 [B * T * P, J, 3]
-        joints_3d = data['smpl_joint'].view(B * T * P, 24, 3)
-        # print("joints_3d shape:", joints_3d.shape)
         # Zero the gradients
         model.optimizer.zero_grad()
 
         # Forward pass
-        pred = model.model(joints_3d)  # 返回一个字典
+        pred = model.model(pose)  # 返回一个字典
 
+        # pred_pose = pred['x_recon'].reshape(-1, 72).contiguous()
+        # betas = data['betas'].view(-1, 10).to(device) 
+        # trans = data['gt_cam_t'].view(-1, 3).to(device)
+        # trans = torch.zeros_like(data['gt_cam_t']).view(-1, 3).to(device)
+        # g_pose = pose.reshape(-1, 72).contiguous()
+
+        # verts, pred_joints = model_smpl(betas, pred_pose, trans, halpe=True)
+        # pred_joints  = pred_joints .view(64, 16, 2, 26, 3)
+        # print("Sample Prediction:", pred_joints[0])
+        # print("pose:", pred['x_recon'][0] )
+        # print("Gpose:", pose[0] )
+        # print("Gbetas:", betas[0] )
+        # print("Gtrans:", trans[0] )
         # Calculate loss
         loss, loss_dict = loss_func.calcul_trainloss(pred, data)
 
@@ -345,26 +351,33 @@ def motionVqvae_train(model, loss_func, train_loader, epoch, num_epoch, device=t
         model.optimizer.step()
 
         # Record the loss
+        train_loss += loss.detach().item()
 
-        loss_batch = loss.detach() #/ batchsize
-        print('epoch: %d/%d, batch: %d/%d, loss: %.6f' %(epoch, num_epoch, i, len_data, loss_batch), loss_dict)
-        train_loss += loss_batch
-
-        # train_loss += loss.detach().item()
-        # print(f'epoch: {epoch}/{num_epoch}, batch: {i}/{len_data}, '
-        #       f'loss: {loss.item():.6f}, recon_loss: {loss_dict.get("recon_loss", 0):.6f}, '
-        #       f'vq_loss: {loss_dict.get("vq_loss", 0):.6f}, bone_length_loss: {loss_dict.get("bone_length_loss", 0):.6f}, '
-        #       f'velocity_loss: {loss_dict.get("velocity_loss", 0):.6f}')
+        print(f'epoch: {epoch}/{num_epoch}, batch: {i}/{len_data}, '
+              f'loss: {loss.item():.6f}, recon_loss: {loss_dict.get("recon_loss", 0):.6f}, '
+              f'vq_loss: {loss_dict.get("vq_loss", 0):.6f}, bone_length_loss: {loss_dict.get("bone_length_loss", 0):.6f}, '
+              f'velocity_loss: {loss_dict.get("velocity_loss", 0):.6f}')
 
     return train_loss / len_data
 
-def motionVqvae_test(model, loss_func, test_loader, epoch, device=torch.device('cpu')):
+def motionVqvae_test(model, loss_func, test_loader, epoch, device=torch.device('cpu'),**kwargs):
     """
     Testing function for Motion VQ-VAE model
     """
     print('-' * 10 + 'motion vqvae model testing' + '-' * 10)
+    smpl = kwargs.get('smpl', None)  # 提取 smpl 参数，默认 None
+    if smpl is None:
+        raise ValueError("SMPL model must be provided for motionVqvae_train.")
+    smpl = smpl.to(device)
+    
     len_data = len(test_loader)
     test_loss = 0.
+
+    model_smpl = SMPLModel(
+                                device=torch.device('cuda'),
+                                model_path='./data/smpl/SMPL_NEUTRAL.pkl', 
+                                data_type=torch.float32,
+                            )
 
     # Set model to evaluation mode
     model.model.eval()
@@ -374,22 +387,46 @@ def motionVqvae_test(model, loss_func, test_loader, epoch, device=torch.device('
             # Move data to the specified device
             data = to_device(data, device)
             pose = data['pose']
-            
-            # Flatten time dimension into batch dimension
-            B, T, P, D = pose.shape
-            pose = pose.view(B * T, P, D)
 
             # Forward pass
             pred = model.model(pose)  # 返回一个字典
+            print("pred :", pred['x_recon'][0] )
+            pose = pose.view(-1, 72)
+            pred_pose = pred['x_recon'].reshape(-1, 72).contiguous()
+            betas = data['betas'].view(-1, 10).to(device) 
+            trans = data['gt_cam_t'].view(-1, 3).to(device)
+            trans = torch.zeros_like(data['gt_cam_t']).view(-1, 3).to(device)
+            # print(f"betas.shape: {betas.shape}")
+            # print("Gtrans:", trans[0] )
+            # print("pred :", pred_pose[0] )
+            # print("pose:", pose[0] )
+            # print(f"pred['x_recon'].shape: {pred['x_recon'].shape}")
 
+            # print(f"betas.device: {betas.device}")
+            # print(f"thetas.device: {pred['x_recon'].device}")
+            # print(f"trans.device: {trans.device}")
+            # print(f"smpl.device: {next(smpl.parameters()).device}") 
+
+            verts, pred_joints = model_smpl(betas, pred_pose, trans, halpe=True)
+            pred['pred_joints'] = pred_joints 
             # Calculate loss
+            pred['pred_joints'] = pred['pred_joints'].view(64, 16, 2, 26, 3)
+            
+            # print(f"pred_joints: {pred['pred_joints'].shape}")
+            # print(f"data_gt_joints: {data['gt_joints'].shape}")
+            
+            # print("Pred Joints Range:", pred['pred_joints'].min().item(), pred['pred_joints'].max().item(), pred['pred_joints'].mean().item())
+            # print("GT Joints Range:", data['gt_joints'].min().item(), data['gt_joints'].max().item(), data['gt_joints'].mean().item())
+            # print("Sample Prediction:", pred['pred_joints'][0])
+            # print("Sample Ground Truth:", data['gt_joints'][0])
+            # break
             loss, loss_dict = loss_func.calcul_testloss(pred, data)
 
 
             loss_batch = loss.mean().detach() #/ batchsize
             print('batch: %d/%d, loss: %.6f ' %(i, len(test_loader), loss_batch), loss_dict)
-            loss_all += loss_batch
-            loss_all = loss_all / len(test_loader)
+            test_loss += loss_batch
+            test_loss = test_loss / len(test_loader)
             
             # Record the loss
             test_loss += loss.detach().item()
@@ -397,68 +434,4 @@ def motionVqvae_test(model, loss_func, test_loader, epoch, device=torch.device('
             print(f'epoch: {epoch}, batch: {i}/{len_data}, '
                   f'loss: {loss.item():.6f}')
 
-    return loss_all
-
-
-# def motionVqvae_eval(model, loader, loss_func, device=torch.device('cpu')):
-#     """
-#     Evaluation function for Motion VQ-VAE model
-#     """
-#     print('-' * 10 + 'motion vqvae model eval' + '-' * 10)
-#     model.model.eval()  # Set model to evaluation mode
-#     eval_loss = 0.
-#     output = {'x_recon': {}, 'quantized': {}, 'z_e': {}}
-#     gt = {'pose': {}, 'valid': {}}
-
-#     with torch.no_grad():  # Disable gradient calculations
-#         for i, data in enumerate(loader):
-#             batchsize = data['pose'].shape[0]
-#             seq_id = data['seq_id']
-#             frame_id = torch.cat(data['frame_id']).reshape(-1, batchsize)
-#             frame_id = frame_id.detach().cpu().numpy().T
-
-#             # Move data to the specified device
-#             del data['seq_id']
-#             del data['frame_id']
-#             data = to_device(data, device)
-
-#             # Forward pass
-#             pred = model.model(data['pose'])
-
-#             pred_x_recon = pred['x_recon'].detach().cpu().numpy()
-#             pred_quantized = pred['quantized'].detach().cpu().numpy()
-#             pred_z_e = pred['z_e'].detach().cpu().numpy()
-
-#             gt_pose = data['pose'].detach().cpu().numpy()
-#             valid = data['valid'].detach().cpu().numpy()
-
-#             for batch in range(batchsize):
-#                 s_id = str(int(seq_id[batch]))
-#                 for f in range(pred_x_recon.shape[1]):
-#                     if s_id not in output['x_recon'].keys():
-#                         output['x_recon'][s_id] = [pred_x_recon[batch][f]]
-#                         output['quantized'][s_id] = [pred_quantized[batch][f]]
-#                         output['z_e'][s_id] = [pred_z_e[batch][f]]
-
-#                         gt['pose'][s_id] = [gt_pose[batch][f]]
-#                         gt['valid'][s_id] = [valid[batch][f]]
-#                     else:
-#                         output['x_recon'][s_id].append(pred_x_recon[batch][f])
-#                         output['quantized'][s_id].append(pred_quantized[batch][f])
-#                         output['z_e'][s_id].append(pred_z_e[batch][f])
-
-#                         gt['pose'][s_id].append(gt_pose[batch][f])
-#                         gt['valid'][s_id].append(valid[batch][f])
-
-#             # Calculate loss
-#             loss, cur_loss_dict = loss_func.calcul_testloss(pred, data)
-#             eval_loss += loss.item()
-
-#             print(f'Batch: {i}/{len(loader)}, Loss: {loss.item():.6f}, '
-#                   f'Recon Loss: {cur_loss_dict.get("recon_loss", 0):.6f}, '
-#                   f'VQ Loss: {cur_loss_dict.get("vq_loss", 0):.6f}, '
-#                   f'Bone Length Loss: {cur_loss_dict.get("bone_length_loss", 0):.6f}, '
-#                   f'Velocity Loss: {cur_loss_dict.get("velocity_loss", 0):.6f}')
-
-#     eval_loss = eval_loss / len(loader)
-#     return eval_loss, output, gt
+    return test_loss

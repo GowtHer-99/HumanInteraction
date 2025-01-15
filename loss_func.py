@@ -643,6 +643,10 @@ class MPJPE(nn.Module):
     def forward_instance(self, pred_joints, gt_joints, valid):
         loss_dict = {}
 
+        # print(f"Initial pred_joints.shape: {pred_joints.shape}")
+        # print(f"Initial gt_joints.shape: {gt_joints.shape}")
+        # print(f"Initial valid.shape: {valid.shape}")
+
         pred_joints = pred_joints[valid == 1]
         gt_joints = gt_joints[valid == 1]
 
@@ -650,9 +654,13 @@ class MPJPE(nn.Module):
 
         pred_joints = pred_joints[:,self.halpe2lsp]
         gt_joints = gt_joints[:,self.halpe2lsp,:3]
+        # print(f"Indexed pred_joints.shape: {pred_joints.shape}")
+        # print(f"Indexed gt_joints.shape: {gt_joints.shape}")
 
         pred_joints = self.align_by_pelvis(pred_joints, format='lsp')
         gt_joints = self.align_by_pelvis(gt_joints, format='lsp')
+        # print(f"Aligned pred_joints.shape: {pred_joints.shape}")
+        # print(f"Aligned gt_joints.shape: {gt_joints.shape}")
 
         diff = torch.sqrt(torch.sum((pred_joints - gt_joints)**2, dim=[2]) * conf)
         diff = torch.mean(diff, dim=[1])
@@ -996,8 +1004,8 @@ class VQVAE_Loss(nn.Module):
 
     def forward(self, x_recon, x, quantized, z_e):
         loss_dict = {}
-        B, T, P, D = x.shape
-        x = x.view(B * T, P, D)
+        # B, T, P, D = x.shape
+        # x = x.view(B * T, P, D)
         # Reconstruction Loss
         recon_loss = self.reconstruction_loss_fn(x_recon, x)
 
@@ -1030,7 +1038,7 @@ class Bone_Length_Loss(nn.Module):
         loss_dict = {}
 
         B, T, P, D = x.shape
-        x_recon = x_recon.view(B, T, P, D) 
+        # x_recon = x_recon.view(B, T, P, D) 
         
         # 初始化损失值
         bone_length_loss = 0.0
@@ -1079,7 +1087,7 @@ class Velocity_Loss(nn.Module):
         loss_dict = {}
 
         B, T, P, D = x.shape
-        x_recon = x_recon.view(B, T, P, D) 
+        # x_recon = x_recon.view(B, T, P, D) 
 
         J = D // 3  # 关节数量
 

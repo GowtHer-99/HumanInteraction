@@ -13,9 +13,6 @@ from torch.utils.data import DataLoader
 from cmd_parser import parse_config
 from utils.module_utils import seed_worker, set_seed
 from modules import init, LossLoader, ModelLoader, DatasetLoader
-from datasets.reconstruction_feature_data import Reconstruction_Feature_Data
-import cv2
-import numpy as np
 
 ###########Load config file in debug mode#########
 # import sys
@@ -35,7 +32,7 @@ def main(**args):
 
     # Initialize project setting, e.g., create output folder, load SMPL model
     out_dir, logger, smpl = init(dtype=dtype, **args)
-
+    out_dir = './vaeoutput'
     # Load loss function
     loss = LossLoader(smpl, device=device, **args)
 
@@ -55,12 +52,7 @@ def main(**args):
         )
         if args.get('use_sch'):
             model.load_scheduler(train_dataset.cumulative_sizes[-1])
-        for i, data in enumerate(train_loader):
-            print(f"Data keys: {data.keys()}")
-            for key, value in data.items():
-                print(f"{key}: {value.shape if isinstance(value, torch.Tensor) else value}")
-            break  # 检查一个 batch 后退出
-
+    
     test_dataset = dataset.load_testset()
     test_loader = DataLoader(
         test_dataset,
@@ -78,17 +70,14 @@ def main(**args):
     for epoch in range(num_epoch):
         # training mode
         if mode == 'train':
-            # training_loss = eval('%s_train' %task)(model, loss, train_loader, epoch, num_epoch, smpl, device=device)
-            training_loss = eval('%s_train' % task)(
-            model, loss, train_loader, epoch, num_epoch, smpl=smpl, device=device
-            )
+            training_loss = eval('%s_train' %task)(model, loss, train_loader, epoch, num_epoch, device=device)
 
-            # # save trained model
-            # if (epoch) % 1 == 0:
-            #     model.save_model(epoch, task)
+            # save trained model
+            if (epoch) % 1 == 0:
+                model.save_model(epoch, task)
 
             if (epoch) % 1 == 0:
-                testing_loss = eval('%s_test' %task)(model, loss, test_loader, epoch, device=device)
+                testing_loss = eval('%s_test' %task)(model, loss, test_loader, epoch, smpl = smpl, device=device)
                 lr = model.optimizer.state_dict()['param_groups'][0]['lr']
                 logger.append([int(epoch + 1), lr, training_loss, testing_loss])
                 # logger.plot(['Train Loss', 'Test Loss'])
@@ -97,18 +86,25 @@ def main(**args):
                 testing_loss = -1.
 
             # save trained model
-            model.save_best_model(testing_loss, epoch, task)
+            torch.save({
+            'epoch': num_epoch,
+            'model_state_dict': model.model.state_dict(),
+            'optimizer_state_dict': model.optimizer.state_dict(),
+            }, os.path.join(out_dir, 'motion_vqvae_final.pth'))
+            print("Final model saved successfully.")
+            
+            model.save_best_model(training_loss, epoch, task)
 
         # testing mode
         elif epoch == 0 and mode == 'test':
             training_loss = -1.
-            testing_loss = eval('%s_test' %task)(model, loss, test_loader, epoch, device=device)
-
+            testing_loss = eval('%s_test' %task)(model, loss, test_loader, epoch, smpl = smpl, device=device)
+            # checkpoint = torch.load(os.path.join(out_dir, 'motion_vqvae_final.pth'), map_location=device)
+            # model.model.load_state_dict(checkpoint['model_state_dict'])
             lr = model.optimizer.state_dict()['param_groups'][0]['lr']
             logger.append([int(epoch + 1), lr, training_loss, testing_loss])
 
     logger.close()
-    print('finish!')
 
 if __name__ == "__main__":
     args = parse_config()

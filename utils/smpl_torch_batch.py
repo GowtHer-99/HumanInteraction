@@ -260,7 +260,8 @@ class SMPLModel(Module):
         if betas.shape[0] == 1 and betas.shape[0] != batch_num:
             betas = betas.expand(batch_num, 10)
 
-        v_shaped = torch.tensordot(betas, self.shapedirs, dims=([1], [2])) + self.v_template
+        # v_shaped = torch.tensordot(betas, self.shapedirs, dims=([1], [2])) + self.v_template
+        v_shaped = torch.tensordot(betas, self.shapedirs[:, :, :betas.shape[-1]], dims=([1], [2])) + self.v_template
         J = torch.matmul(self.J_regressor, v_shaped)
         if gR is not None:
             G, R_cube_big = self.gR2G(gR, J)

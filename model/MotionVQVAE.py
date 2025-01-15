@@ -2,6 +2,86 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
+
+# # 1D残差块，适配3D模型的运动特征学习
+# class Residual(nn.Module):
+#     def __init__(self, in_channels, num_hiddens, num_residual_hiddens):
+#         super(Residual, self).__init__()
+        
+#         # 第一个卷积层 (kernel_size=3)，保持特征维度
+#         self.conv1 = nn.Conv1d(
+#             in_channels=in_channels,
+#             out_channels=num_residual_hiddens,
+#             kernel_size=3,
+#             stride=1,
+#             padding=1,
+#             bias=False  # 去掉偏置，稳定训练
+#         )
+        
+#         # 第二个卷积层 (kernel_size=1)，提升特征维度
+#         self.conv2 = nn.Conv1d(
+#             in_channels=num_residual_hiddens,
+#             out_channels=num_hiddens,
+#             kernel_size=1,
+#             stride=1,
+#             bias=False
+#         )
+        
+#         # 激活函数
+#         self.relu = nn.ReLU(True)
+
+#     def forward(self, x):
+#         # 输入残差路径
+#         residual = x
+        
+#         # 卷积 + 激活
+#         out = self.conv1(x)
+#         out = self.relu(out)
+        
+#         out = self.conv2(out)
+        
+#         # 加入残差连接
+#         out += residual
+        
+#         # 最终激活输出
+#         return self.relu(out)
+    
+# # # 测试 Residual Block
+# # x = torch.randn(32, 128, 22)  # (B, D, J) 批次32，特征维度128，关节数22
+# # block = Residual(in_channels=128, num_hiddens=128, num_residual_hiddens=64)
+# # output = block(x)
+# # print(output.shape)  # 输出: torch.Size([32, 128, 22])
+
+
+# class ResidualStack(nn.Module):
+#     def __init__(self, in_channels, num_hiddens, num_residual_layers, num_residual_hiddens):
+#         super(ResidualStack, self).__init__()
+
+#         # 创建 num_residual_layers 个 Residual 块
+#         self.layers = nn.ModuleList(
+#             [Residual(in_channels, num_hiddens, num_residual_hiddens)
+#              for _ in range(num_residual_layers)]
+#         )
+        
+#         # 激活函数 (输出层激活)
+#         self.relu = nn.ReLU(True)
+
+#     def forward(self, x):
+#         # 逐层通过 Residual Block
+#         for layer in self.layers:
+#             x = layer(x)
+        
+#         # 最终输出激活
+#         return self.relu(x)
+
+# # # 测试 Residual Stack
+# # x = torch.randn(32, 128, 22)  # (B, D, J)
+# # stack = ResidualStack(in_channels=128, num_hiddens=128, num_residual_layers=2, num_residual_hiddens=64)
+# # output = stack(x)
+# # print(output.shape)  # 输出: torch.Size([32, 128, 22])
+
+
 class Residual(nn.Module):
     def __init__(self, in_channels, num_hiddens, num_residual_hiddens):
         super(Residual, self).__init__()
@@ -171,15 +251,15 @@ class Encoder(nn.Module):
 
         self.conv1 = nn.Conv2d(in_channels=in_channels, 
                                out_channels=num_hiddens // 2, 
-                               kernel_size=(3,3), 
-                               stride=(2,2), 
-                               padding=(1,1))
+                               kernel_size=(4,1), 
+                               stride=2, 
+                               padding=1)
         
         self.conv2 = nn.Conv2d(in_channels=num_hiddens // 2, 
                                out_channels=num_hiddens, 
-                               kernel_size=(3,3), 
-                               stride=(2,2), 
-                               padding=(1,1))
+                               kernel_size=(3,1), 
+                               stride=2, 
+                               padding=1)
 
         self.conv3 = nn.Conv2d(in_channels=num_hiddens, 
                                out_channels=num_hiddens, 
@@ -193,20 +273,32 @@ class Encoder(nn.Module):
                                             num_residual_hiddens=num_residual_hiddens)
 
     def forward(self, x):
+        # 输入的运动序列通常为 (B, P, D)
+        # 添加维度，使其适配卷积层 (B, P, D) -> (B, 1, P, D)
         # print(f"Encoder Input (before unsqueeze): {x.shape}")
         # x = x.unsqueeze(1)
-        x = x.permute(0, 2, 1).unsqueeze(-1) 
+        x = x.permute(0, 3, 1, 2).contiguous()  # (B, T, P, D) -> (B, D, T, P)
         # print(f"Encoder Input (after unsqueeze): {x.shape}")
+
+        # 卷积层1：特征提取和下采样 (B, 1, D, J) -> (B, H/2, D/2, J/2)
         x = self.conv1(x)
         x = F.relu(x)
         # print(f"Encoder Input (before unsqueeze): {x.shape}")
+        # 卷积层2：进一步下采样 (B, H/2, D/2, J/2) -> (B, H, D/4, J/4)
         x = self.conv2(x)
         x = F.relu(x)
         # print(f"Encoder Input (before unsqueeze): {x.shape}")
+        # 卷积层3：保持空间维度 (B, H, D/4, J/4) -> (B, H, D/4, J/4)
         x = self.conv3(x)
         # print(f"Encoder Input (before unsqueeze): {x.shape}")
+        # 残差块处理
         return self.residual_stack(x)
     
+# #测试
+# encoder = Encoder(in_channels=1, num_hiddens=128, num_residual_layers=2, num_residual_hiddens=32)
+# x = torch.randn(32, 512, 22)  # (B, D, J)
+# output = encoder(x)
+# print(output.shape)  # 输出: torch.Size([32, 128, 128, 6])
 
 class Decoder(nn.Module):
     def __init__(self, in_channels, num_hiddens, num_residual_layers, num_residual_hiddens):
@@ -223,26 +315,18 @@ class Decoder(nn.Module):
                                             num_residual_layers=num_residual_layers,
                                             num_residual_hiddens=num_residual_hiddens)
         
-        # self.conv_trans1 = nn.ConvTranspose2d(in_channels=num_hiddens, 
-        #                                       out_channels=num_hiddens // 2,
-        #                                       kernel_size=(4, 4), 
-        #                                       stride=(2, 2), 
-        #                                       padding=(1, 1),
-        #                                       output_padding=(0,1))
-        
         self.conv_trans1 = nn.ConvTranspose2d(in_channels=num_hiddens, 
                                               out_channels=num_hiddens // 2,
-                                              kernel_size=(3, 3), 
-                                              stride=(2, 2), 
-                                              padding=(1, 1),
-                                              output_padding=(1,0))
-
+                                              kernel_size=(3,1), 
+                                              stride=2, 
+                                              padding=1,
+                                              output_padding=(1,1))
+        
         self.conv_trans2 = nn.ConvTranspose2d(in_channels=num_hiddens // 2, 
-                                              out_channels=3,
-                                              kernel_size=(3, 3), 
-                                              stride=(2, 2), 
-                                              padding=(1, 1),
-                                              output_padding=(1,0)
+                                              out_channels=72,
+                                              kernel_size=(4, 1), 
+                                              stride=(2, 1), 
+                                              padding=(1, 0)
                                               )
     def forward(self, x):
         # 输入的量化特征 (B, d', j, n)
@@ -260,11 +344,17 @@ class Decoder(nn.Module):
         # 第2次上采样 (B, H/2, 2j, 2n) -> (B, 1, 4j, 4n)
         x = self.conv_trans2(x)
         # print(f"Decoder Input (before conv1): {x.shape}")
-        # 去掉通道维度，输出重建结果 (B, 1, J, D) -> (B, J, D)
-        x =  x.squeeze(-1).permute(0, 2, 1)
+        # 去掉通道维度，输出重建结果 (B, D, T, P) -> (B, T, P, D)
+        # x = x.squeeze(1)
+        x = x.permute(0, 2, 3, 1).contiguous()
         # print(f"Decoder Input (before conv1): {x.shape}")
         return x
-
+    
+# # 测试
+# decoder = Decoder(in_channels=512, num_hiddens=128, num_residual_layers=2, num_residual_hiddens=32)
+# x = torch.randn(32, 512, 6, 6)  # (B, d', j, n)
+# output = decoder(x)
+# print(output.shape)  # 输出: torch.Size([32, 22, 512]) (B, J, D)
 
 
 class MotionVQVAE(nn.Module):
@@ -278,7 +368,7 @@ class MotionVQVAE(nn.Module):
         self.frame_length = frame_length  # 可选：未来用于多帧时序处理
 
         # 编码器，将输入3D运动数据编码为低维表示
-        self.encoder = Encoder(3, num_hiddens,
+        self.encoder = Encoder(72, num_hiddens,
                                 num_residual_layers, 
                                 num_residual_hiddens)
         
@@ -302,6 +392,36 @@ class MotionVQVAE(nn.Module):
                                 num_residual_layers, 
                                 num_residual_hiddens)
 
+    # def forward(self, x):
+    #     # print(f"Input to Encoder (before): {x.shape}")
+    #     # 编码器提取低维表示 (B, J, D) -> (B, num_hiddens, j, n)
+    #     z = self.encoder(x)
+        
+    #     # 降维卷积匹配量化输入维度 (B, num_hiddens, j, n) -> (B, embedding_dim, j, n)
+    #     z = self.pre_vq_conv(z)
+
+    #     # 量化层计算损失和量化输出
+    #     loss, quantized, perplexity, _ = self.vq_vae(z)
+
+    #     # 解码器将量化结果还原到3D运动空间
+    #     x_recon = self.decoder(quantized)
+
+    #     # 返回量化损失、重建运动数据和困惑度
+    #     return loss, x_recon, perplexity
+    
+#   def forward(self, x):
+#     # 编码数据
+#     z = self.encoder(x)
+#     z = self.pre_vq_conv(z)
+
+#     # 量化编码数据
+#     quantized, _, _ = self.vq_vae(z)
+
+#     # 解码数据
+#     x_recon = self.decoder(quantized)
+
+#     # 返回重建数据和量化编码
+#     return x_recon, quantized
     def forward(self, x):
         z_e = self.encoder(x)
         z_e_pre_vq = self.pre_vq_conv(z_e)
