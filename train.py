@@ -86,12 +86,12 @@ def main(**args):
                 testing_loss = -1.
 
             # save trained model
-            torch.save({
-            'epoch': num_epoch,
-            'model_state_dict': model.model.state_dict(),
-            'optimizer_state_dict': model.optimizer.state_dict(),
-            }, os.path.join(out_dir, 'motion_vqvae_final.pth'))
-            print("Final model saved successfully.")
+            # torch.save({
+            # 'epoch': num_epoch,
+            # 'model_state_dict': model.model.state_dict(),
+            # 'optimizer_state_dict': model.optimizer.state_dict(),
+            # }, os.path.join(out_dir, 'motion_vqvae_final.pth'))
+            # print("Final model saved successfully.")
             
             model.save_best_model(training_loss, epoch, task)
 
