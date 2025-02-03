@@ -343,6 +343,7 @@ def motionVqvae_train(model, loss_func, train_loader, epoch, num_epoch, device=t
         # print("Gpose:", pose[0] )
         # print("Gbetas:", betas[0] )
         # print("Gtrans:", trans[0] )
+        
         # Calculate loss
         loss, loss_dict = loss_func.calcul_trainloss(pred, data)
 
